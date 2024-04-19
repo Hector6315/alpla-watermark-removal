@@ -1,9 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import cv2
-import os
-import scipy
-from scipy.sparse import *
 
 # helpers that are going to be useful here
 sobel_x = tf.constant([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], tf.float32)

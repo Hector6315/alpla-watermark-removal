@@ -1,12 +1,10 @@
 import numpy as np
 import cv2
 import os
-import scipy
-from scipy.sparse import *
-from scipy.sparse import linalg
 from src.estimate_watermark import *
 from src.closed_form_matting import *
-from numpy import nan, isnan
+from matplotlib import pyplot as plt
+
 
 def get_cropped_images(foldername, num_images, start, end, shape):
     '''
@@ -91,7 +89,7 @@ def get_ySobel_matrix(m, n, p):
             actual_map.append((i, coord[0], coord[1]))
 
     i, j, vals = zip(*actual_map)
-    return coo_matrix((vals, (i, j)), shape=(size, size))
+    return scipy.parse.coo_matrix((vals, (i, j)), shape=(size, size))
 
 
 # get Sobel sparse matrix for X
@@ -110,7 +108,7 @@ def get_xSobel_matrix(m, n, p):
             actual_map.append((i, coord[0], coord[1]))
 
     i, j, vals = zip(*actual_map)
-    return coo_matrix((vals, (i, j)), shape=(size, size))
+    return scipy.parse.coo_matrix((vals, (i, j)), shape=(size, size))
 
 # get estimated normalized alpha matte
 def estimate_normalized_alpha(J, W_m, num_images, threshold=170, invert=False, adaptive=False, adaptive_threshold=21, c2=10):
@@ -206,11 +204,11 @@ def solve_images(J, W_m, alpha, W_init, gamma=1, beta=1, lambda_w=0.005, lambda_
         Wm_gx = cv2.Sobel(W_m, cv2.CV_64F, 1, 0, 3)
         Wm_gy = cv2.Sobel(W_m, cv2.CV_64F, 0, 1, 3)
 
-        cx = diags(np.abs(alpha_gx).reshape(-1))
-        cy = diags(np.abs(alpha_gy).reshape(-1))
+        cx = scipy.parse.diags(np.abs(alpha_gx).reshape(-1))
+        cy = scipy.parse.diags(np.abs(alpha_gy).reshape(-1))
 
-        alpha_diag = diags(alpha.reshape(-1))
-        alpha_bar_diag = diags((1-alpha).reshape(-1))
+        alpha_diag = scipy.parse.diags(alpha.reshape(-1))
+        alpha_bar_diag = scipy.parse.diags((1-alpha).reshape(-1))
 
         for i in range(K):
             # prep vars
@@ -224,13 +222,13 @@ def solve_images(J, W_m, alpha, W_init, gamma=1, beta=1, lambda_w=0.005, lambda_
             alphaWk_gx = cv2.Sobel(alphaWk, cv2.CV_64F, 1, 0, 3)
             alphaWk_gy = cv2.Sobel(alphaWk, cv2.CV_64F, 0, 1, 3)        
 
-            phi_data = diags( Func_Phi_deriv(np.square(alpha*Wk[i] + (1-alpha)*Ik[i] - J[i]).reshape(-1)) )
-            phi_W = diags( Func_Phi_deriv(np.square( np.abs(alpha_gx)*Wkx + np.abs(alpha_gy)*Wky  ).reshape(-1)) )
-            phi_I = diags( Func_Phi_deriv(np.square( np.abs(alpha_gx)*Ikx + np.abs(alpha_gy)*Iky  ).reshape(-1)) )
-            phi_f = diags( Func_Phi_deriv( ((Wm_gx - alphaWk_gx)**2 + (Wm_gy - alphaWk_gy)**2 ).reshape(-1)) )
-            phi_aux = diags( Func_Phi_deriv(np.square(Wk[i] - W).reshape(-1)) )
-            phi_rI = diags( Func_Phi_deriv( np.abs(alpha_gx)*(Ikx**2) + np.abs(alpha_gy)*(Iky**2) ).reshape(-1) )
-            phi_rW = diags( Func_Phi_deriv( np.abs(alpha_gx)*(Wkx**2) + np.abs(alpha_gy)*(Wky**2) ).reshape(-1) )
+            phi_data = scipy.parse.diags( Func_Phi_deriv(np.square(alpha*Wk[i] + (1-alpha)*Ik[i] - J[i]).reshape(-1)) )
+            phi_W = scipy.parse.diags( Func_Phi_deriv(np.square( np.abs(alpha_gx)*Wkx + np.abs(alpha_gy)*Wky  ).reshape(-1)) )
+            phi_I = scipy.parse.diags( Func_Phi_deriv(np.square( np.abs(alpha_gx)*Ikx + np.abs(alpha_gy)*Iky  ).reshape(-1)) )
+            phi_f = scipy.parse.diags( Func_Phi_deriv( ((Wm_gx - alphaWk_gx)**2 + (Wm_gy - alphaWk_gy)**2 ).reshape(-1)) )
+            phi_aux = scipy.parse.diags( Func_Phi_deriv(np.square(Wk[i] - W).reshape(-1)) )
+            phi_rI = scipy.parse.diags( Func_Phi_deriv( np.abs(alpha_gx)*(Ikx**2) + np.abs(alpha_gy)*(Iky**2) ).reshape(-1) )
+            phi_rW = scipy.parse.diags( Func_Phi_deriv( np.abs(alpha_gx)*(Wkx**2) + np.abs(alpha_gy)*(Wky**2) ).reshape(-1) )
 
             L_i = sobelx.T.dot(cx*phi_rI).dot(sobelx) + sobely.T.dot(cy*phi_rI).dot(sobely)
             L_w = sobelx.T.dot(cx*phi_rW).dot(sobelx) + sobely.T.dot(cy*phi_rW).dot(sobely)
@@ -240,11 +238,11 @@ def solve_images(J, W_m, alpha, W_init, gamma=1, beta=1, lambda_w=0.005, lambda_
             bW = alpha_diag.dot(phi_data).dot(J[i].reshape(-1)) + beta*L_f.dot(W_m.reshape(-1)) + gamma*phi_aux.dot(W.reshape(-1))
             bI = alpha_bar_diag.dot(phi_data).dot(J[i].reshape(-1))
 
-            A = vstack([hstack([(alpha_diag**2)*phi_data + lambda_w*L_w + beta*A_f, alpha_diag*alpha_bar_diag*phi_data]), \
-                         hstack([alpha_diag*alpha_bar_diag*phi_data, (alpha_bar_diag**2)*phi_data + lambda_i*L_i])]).tocsr()
+            A = np.vstack([np.hstack([(alpha_diag**2)*phi_data + lambda_w*L_w + beta*A_f, alpha_diag*alpha_bar_diag*phi_data]), \
+                         np.hstack([alpha_diag*alpha_bar_diag*phi_data, (alpha_bar_diag**2)*phi_data + lambda_i*L_i])]).tocsr()
 
             b = np.hstack([bW, bI])
-            x = linalg.spsolve(A, b)
+            x = np.linalg.spsolve(A, b)
             
             Wk[i] = x[:size].reshape(m, n, p)
             Ik[i] = x[size:].reshape(m, n, p)
@@ -265,18 +263,18 @@ def solve_images(J, W_m, alpha, W_init, gamma=1, beta=1, lambda_w=0.005, lambda_
         
         # Step 3
         print("Step 3")
-        W_diag = diags(W.reshape(-1))
+        W_diag = scipy.parse.diags(W.reshape(-1))
         
         for i in range(K):
             alphaWk = alpha*Wk[i]
             alphaWk_gx = cv2.Sobel(alphaWk, cv2.CV_64F, 1, 0, 3)
             alphaWk_gy = cv2.Sobel(alphaWk, cv2.CV_64F, 0, 1, 3)        
-            phi_f = diags( Func_Phi_deriv( ((Wm_gx - alphaWk_gx)**2 + (Wm_gy - alphaWk_gy)**2 ).reshape(-1)) )
+            phi_f = scipy.parse.diags( Func_Phi_deriv( ((Wm_gx - alphaWk_gx)**2 + (Wm_gy - alphaWk_gy)**2 ).reshape(-1)) )
             
-            phi_kA = diags(( (Func_Phi_deriv((((alpha*Wk[i] + (1-alpha)*Ik[i] - J[i])**2)))) * ((W-Ik[i])**2)  ).reshape(-1))
+            phi_kA = scipy.parse.diags(( (Func_Phi_deriv((((alpha*Wk[i] + (1-alpha)*Ik[i] - J[i])**2)))) * ((W-Ik[i])**2)  ).reshape(-1))
             phi_kB = (( (Func_Phi_deriv((((alpha*Wk[i] + (1-alpha)*Ik[i] - J[i])**2))))*(W-Ik[i])*(J[i]-Ik[i])  ).reshape(-1))
 
-            phi_alpha = diags(Func_Phi_deriv(alpha_gx**2 + alpha_gy**2).reshape(-1))
+            phi_alpha = scipy.parse.diags(Func_Phi_deriv(alpha_gx**2 + alpha_gy**2).reshape(-1))
             L_alpha = sobelx.T.dot(phi_alpha.dot(sobelx)) + sobely.T.dot(phi_alpha.dot(sobely))
 
             L_f = sobelx.T.dot(phi_f).dot(sobelx) + sobely.T.dot(phi_f).dot(sobely)
@@ -289,7 +287,7 @@ def solve_images(J, W_m, alpha, W_init, gamma=1, beta=1, lambda_w=0.005, lambda_
                 A1 += (phi_kA + lambda_a*L_alpha + beta*A_tilde_f)
                 b1 += (phi_kB + beta*W_diag.T.dot(L_f).dot(W_m.reshape(-1)))
 
-        alpha = linalg.spsolve(A1, b1).reshape(m,n,p)
+        alpha = np.linalg.spsolve(A1, b1).reshape(m,n,p)
 
         plt.imshow(PlotImage(alpha))
         plt.draw()

@@ -3,7 +3,7 @@ from __future__ import division
 import numpy as np
 import scipy.sparse
 import scipy
-from scipy.sparse import *
+from scipy.parse import *
 from numpy.lib.stride_tricks import as_strided
 
 
